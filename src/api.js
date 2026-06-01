@@ -1,3 +1,5 @@
+const IS_LOCAL = ['localhost', '127.0.0.1'].includes(window.location.hostname)
+
 function noEmDash(s) {
   return typeof s === 'string' ? s.replace(/—/g, ' - ') : s
 }
@@ -37,25 +39,45 @@ const CATEGORY_INSTRUCTIONS = {
   'surprise-me': 'compelling story from any domain, fiction or nonfiction',
 }
 
+export async function generateResponse(messages) {
+  if (IS_LOCAL) {
+    const res = await fetch('http://localhost:11434/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3.1:8b',
+        messages,
+        stream: false,
+        format: 'json',
+      }),
+    })
+    if (!res.ok) throw new Error(`Ollama error ${res.status}`)
+    const data = await res.json()
+    return data.message.content
+  }
+
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${import.meta.env.VITE_GROQ_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-70b-versatile',
+      messages,
+    }),
+  })
+  if (!res.ok) throw new Error(`Groq error ${res.status}`)
+  const data = await res.json()
+  return data.choices[0].message.content
+}
+
 export async function fetchStory(categoryId) {
   const instruction = CATEGORY_INSTRUCTIONS[categoryId]
   const prompt = `Write a 400-550 word ${instruction}. Respond ONLY as JSON: {"title":"...","story":"...","type":"fiction or nonfiction"}`
 
-  const res = await fetch('http://localhost:11434/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama3.1:8b',
-      messages: [{ role: 'user', content: prompt }],
-      stream: false,
-      format: 'json',
-    }),
-  })
-
-  if (!res.ok) throw new Error(`Ollama error ${res.status}`)
-
-  const data = await res.json()
-  return sanitizeStory(JSON.parse(data.message.content))
+  const text = await generateResponse([{ role: 'user', content: prompt }])
+  return sanitizeStory(JSON.parse(text))
 }
 
 export async function fetchFeedback(story, summary) {
@@ -68,19 +90,6 @@ export async function fetchFeedback(story, summary) {
     `Reference Obama, Mandela, Chekhov, or Shakespeare in your storyteller tip. ` +
     `Respond ONLY as JSON: {"scores":{"completeness":7,"clarity":8,"grammar":6,"tense_consistency":7,"verb_strength":5,"transitions":6,"narrative_voice":7,"conciseness":8},"overall_score":7,"improvements":[{"original":"their line","rewrite":"better version","why":"reason"}],"strength":"what they did well","framework_tip":{"name":"PREP","example":"how to apply it to their text"},"storyteller_tip":"tip referencing a great communicator","overall_feedback":"2-3 sentence assessment"}`
 
-  const res = await fetch('http://localhost:11434/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama3.1:8b',
-      messages: [{ role: 'user', content: prompt }],
-      stream: false,
-      format: 'json',
-    }),
-  })
-
-  if (!res.ok) throw new Error(`Ollama error ${res.status}`)
-
-  const data = await res.json()
-  return sanitizeFeedback(JSON.parse(data.message.content))
+  const text = await generateResponse([{ role: 'user', content: prompt }])
+  return sanitizeFeedback(JSON.parse(text))
 }
