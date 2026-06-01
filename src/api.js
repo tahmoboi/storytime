@@ -41,7 +41,7 @@ const CATEGORY_INSTRUCTIONS = {
 
 export async function generateResponse(messages) {
   if (IS_LOCAL) {
-    const res = await fetch('http://localhost:11434/api/chat', {
+    const res = await fetch('/ollama/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -67,7 +67,11 @@ export async function generateResponse(messages) {
       messages,
     }),
   })
-  if (!res.ok) throw new Error(`Groq error ${res.status}`)
+  if (!res.ok) {
+    const errBody = await res.text()
+    console.error('Groq API error body:', errBody)
+    throw new Error(`Groq API error ${res.status}`)
+  }
   const data = await res.json()
   return data.choices[0].message.content
 }
